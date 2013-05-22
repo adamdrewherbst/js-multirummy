@@ -38,7 +38,9 @@
 				<input type="text" id="nickname" size="20" placeholder="Enter nickname"></input>
 				<button id="start_button" type="button"></button>
 				<button id="rules_button" type="button">Rules</button>
-				<div id="server_msg"></div>
+				<div id="server_msg">
+					<div id="log"></div>
+				</div>
 				<!--<br/><input type="text" id="debug_text" size="100"></input>
 				<button id="debug_button" type="button">Debug Line</button>-->
 			</div>

@@ -1,0 +1,20 @@
+Rummy:
+
+-poll server to join game
+-server: deal you 7 cards
+
+-begin long polling
+-server: wait until it is your turn again or someone has won, then notify you
+-if your turn, discard, then repeat long poll
+
+-on sort cards, send current hand order to server - interrupt current long poll?
+-server checks if you win - inserts you as winner in DB if not taken yet
+
+database:
+
+-player info stored in RummyPlayer table
+	one column says who is the winner
+-52 cards stored in RummyDeck table
+	identified by index from 0 to 51 - 0 to 12 are 2 through Ace of Clubs, followed by Spades, Diamonds, Hearts
+	each card knows which pile/whose hand it is in
+
