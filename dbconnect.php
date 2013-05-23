@@ -15,6 +15,19 @@ function fail($msg) {
 	$mysqli->close();
 	exit();
 }
+//to be used by clients to exit with data
+function succeed($data) {
+	global $mysqli, $response;
+	echo json_encode(array_merge(array('response' => $response), $data));
+	if(get_class($result) === 'mysqli_result') $result->free();
+	$mysqli->close();
+	exit();
+}
+//to be used by clients to add to the response
+function addResponse($line) {
+	global $response;
+	$response .= $line . PHP_EOL;
+}
 $response = '';
 
 //now connect to the MySQL 'games' database

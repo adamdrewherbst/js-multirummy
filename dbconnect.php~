@@ -2,6 +2,7 @@
 
 //since all server events will include this module, set up game-wide globals here
 define('HAND_SIZE', 7);
+define('DECK_SIZE', 52);
 $suits = array('Clubs', 'Spades', 'Diamonds', 'Hearts');
 $numbers = array('Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Jack', 'Queen', 'King', 'Ace');
 
@@ -10,6 +11,14 @@ function fail($msg) {
 	global $mysqli, $response;
 	$response .= $msg . PHP_EOL;
 	echo json_encode(array('response' => $response));
+	if(get_class($result) === 'mysqli_result') $result->free();
+	$mysqli->close();
+	exit();
+}
+//to be used by clients to exit with data
+function succeed($data) {
+	global $mysqli, $response;
+	echo json_encode(array_merge(array('response' => $response), $data));
 	if(get_class($result) === 'mysqli_result') $result->free();
 	$mysqli->close();
 	exit();

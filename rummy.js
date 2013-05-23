@@ -3,7 +3,7 @@ var suits = ['Clubs', 'Spades', 'Diamonds', 'Hearts']
 var numbers = ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Jack', 'Queen', 'King', 'Ace'];
 var numCards = suits.length * numbers.length, handSize = 7, dealt = false;
 var nickname; //username in the game room
-var currentTurn; //whose turn I think it is, so the server can tell me when it changes
+var currentTurn, currentWinner, currentRequests, currentGames; //what I think is the current game state, so the server can tell me when it changes
 
 function resetGame() {
 	//set all buttons/messages back to initial state
@@ -13,6 +13,9 @@ function resetGame() {
 	//generate all 52 cards as a stack on the upper left
 	dealt = false;
 	currentTurn = '';
+	currentWinner = '';
+	currentRequests = [];
+	currentGames = [];
 	$('div.pile > .inner').empty(); //the inner div of a pile holds its cards
 	$stack = $('#stack');
 	//make an array of the numbers 0-51
@@ -427,20 +430,60 @@ function failureAnimation() {
 	$winMessage.css({'visibility':'visible', 'font-size':'100px'});
 }
 
+//add a game to the list of those in progress - if notStarted, I can request to join it
+function addGame(name, notStarted) {
+	currentGames.push(name);
+	var $game = $('<li><div class="game">' + name
+		+ (notStarted ? '<button type="button" class="join_game">Request to Join</button>' : '')
+		+ '</div></li>');
+	$('#game_list').append($game);
+}
+
+//add a request by player <name> to join this game
+function addRequest(name) {
+	currentRequests.push(name);
+	var $request = $('<li><div class="request">' + name + '<button type="button" class="accept_request">Accept</button>'
+		+ '<button type="button" class="reject_request">Reject</button></div></li>');
+	$('#request_list').append($request);
+}
+
 //initiate the indefinite long-polling of the server to receive any updates (eg. when it's my turn)
 function poll() {
 	$.ajax({
 		url:'long_poll.php',
-		data: {'turn':currentTurn},
+		type: 'POST',
+		data: { //pass what I think is the current game state - server will send updates if there are any
+			'player':nickname,
+			'turn':currentTurn,
+			'winner':currentWinner,
+			'requests[]':currentRequests
+			'games[]':currentGames
+		},
 		dataType:'json',
 		success: function(data) {
-			console.log('ajax success');
+			serverLog(data.response);
+			if(data.hand && !dealt) {
+				var hand = '';
+				for(var c = 0; c < data.hand.length; c++) hand += data.hand[c] + ' ';
+				serverLog('hand: ' + hand);
+				deal(data.hand);
+			}
+			if(data.winner) {
+				currentWinner = data.winner;
+				serverLog(data.winner + ' wins!');
+			}
+			if(data.turn) {
+				currentTurn = data.turn;
+				serverLog('It is now ' + (data.turn === nickname ? 'YOUR' : data.turn + "'s") + ' turn');
+			}
+			if(data.requesters) {
+				for(var i = 0; i < data.requesters.length; i++) addRequest(data.requesters[i]);
+			}
 		},
 		error: function(jqXHR, textStatus, errorThrown) {
 			console.log('ajax - ' + textStatus + ': ' + errorThrown);
 		},
-		complete: poll,
-		timeout: 10000
+		complete: poll
 	});
 }
 
@@ -455,6 +498,46 @@ function serverLog(str) {
 $(document).ready(function() {
 
 	resetGame();
+	nickname = '';
+	while(nickname == '') {
+		while(nickname == '') {
+			nickname = prompt('Enter your nickname:');
+		}
+		$.ajax({
+			url:'register.php',
+			async:false,
+			data:{'name':nickname},
+			success: function(data) {
+				serverLog(data.response);
+				if(!data.success) {
+					nickname = '';
+					return;
+				}
+				if(data.games) {
+					for(var i = 0; i < data.games.length; i++) addGame(data.games[i]);
+				}
+			},
+			error: function(jqXHR, textStatus, errorThrown) {
+				console.log('ajax - ' + textStatus + ': ' + errorThrown);
+			}
+		});
+	}
+	console.log('joining as ' + nickname);
+	
+	$.ajax({
+		url:'join_game.php',
+		data:{'player':nickname},
+		dataType:'json',
+		success: function(data) {
+			console.log('ajax success');
+			serverLog(data.response);
+			poll();
+		},
+		error: function(jqXHR, textStatus, errorThrown) {
+			console.log('ajax - ' + textStatus + ': ' + errorThrown);
+		},
+		complete: function() {console.log('ajax complete');}
+	});
 	
 	//need this to allow right-clicks on cards
 	$('#card_panel')[0].oncontextmenu = function(){return false;};
@@ -481,7 +564,7 @@ $(document).ready(function() {
 					for(var c = 0; c < data.hand.length; c++) hand += data.hand[c] + ' ';
 					serverLog(hand);
 					deal(data.hand);
-					//poll();
+					poll();
 				},
 				error: function(jqXHR, textStatus, errorThrown) {
 					console.log('ajax - ' + textStatus + ': ' + errorThrown);
@@ -499,6 +582,41 @@ $(document).ready(function() {
 	}
 	$('#rules_button').click(toggle_rules);
 	$('#rules_message').click(toggle_rules);
+	
+	$('.join_game').click(function() {
+		var $this = $(this), $div = $this.parent(), name = $div.text();
+		$.ajax({
+			url:'place_request.php',
+			data:{'player':nickname, 'game':name},
+			success:function() {
+				serverLog(data.response);
+				if(data.success) {
+					$this.remove();
+				}
+			},
+			error: function(jqXHR, textStatus, errorThrown) {
+				console.log('ajax - ' + textStatus + ': ' + errorThrown);
+			}
+		});
+	});
+	$('.accept_request, .reject_request').click(function() {
+		//get decision from class name
+		var decision = this.className.replace('_request', '');
+		var $div = $(this).parent(), name = $div.text().split(' ')[0];
+		$.ajax({
+			url:'process_request.php',
+			data:{'player':nickname, 'name':name, 'decision':decision},
+			success:function() {
+				if(data.success) {
+					$div.remove();
+					currentRequests.splice(currentRequests.indexOf(name));
+				}
+			},
+			error: function(jqXHR, textStatus, errorThrown) {
+				console.log('ajax - ' + textStatus + ': ' + errorThrown);
+			}
+		});
+	});
 	
 	//for real-time troubleshooting by logging the result of any line of JavaScript code
 	$('#debug_text').keypress(function(e) {

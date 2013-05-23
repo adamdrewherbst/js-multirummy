@@ -45,14 +45,14 @@ $cols = array(
 	array('name' => 'ID', 'type' => 'SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT'),
 	array('name' => 'NickName', 'type' => 'VARCHAR(30)'),
 	array('name' => 'ClientIP', 'type' => 'VARCHAR(45)'), //allow for IPv6
-	array('name' => 'IsWinner', 'type' => 'BOOL'),
+	array('name' => 'GameID', 'type' => 'SMALLINT UNSIGNED'),
 );
 initTable('RummyPlayer', $cols, 'ID', 'UNIQUE(NickName)');
 
 //ensure role table is initialized (stores the player corresponding to each of several roles in the game)
 $cols = array(
 	array('name' => 'Role', 'type' => 'VARCHAR(30)'),
-	array('name' => 'PlayerID', 'type' => 'SMALLINT UNSIGNED'),
+	array('name' => 'PlayerID', 'type' => 'VARCHAR(30)'),
 );
 initTable('RummyRoles', $cols, 'Role');
 $mysqli->query('INSERT INTO RummyRoles(Role) VALUES ("TURN"),("WINNER")');

@@ -35,10 +35,22 @@
 				<div id="hand" class="pile"><div class="inner"></div></div>
 			</div>
 			<div id="control_panel">
-				<input type="text" id="nickname" size="20" placeholder="Enter nickname"></input>
-				<button id="start_button" type="button"></button>
-				<button id="rules_button" type="button">Rules</button>
+				<div id="controls">
+					<input type="text" id="nickname" size="20" placeholder="Enter nickname"></input>
+					<button id="start_button" type="button"></button>
+					<button id="rules_button" type="button">Rules</button>
+				</div>
 				<div id="server_msg"></div>
+				<div id="game_info">
+					<div id="games">
+						<h3>Existing Games</h3>
+						<ul id="game_list"></ul>
+					</div>
+					<div id="requests">
+						<h3>Requesting to join:</h3>
+						<ul id="request_list"></ul>
+					</div>
+				</div>
 				<!--<br/><input type="text" id="debug_text" size="100"></input>
 				<button id="debug_button" type="button">Debug Line</button>-->
 			</div>

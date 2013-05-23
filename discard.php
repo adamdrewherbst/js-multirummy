@@ -6,7 +6,7 @@ global $mysqli, $response, $player, $playerID;
 
 //make sure it is this player's turn
 $query = 'SELECT PlayerID FROM RummyRoles WHERE Role="TURN"';
-if(!($result = $mysqli->query($query)) or !($row = $result->fetch_row()) or $row[0] !== $playerID)
+if(!($result = $mysqli->query($query)) or !($row = $result->fetch_row()) or $row[0] !== $player)
 	fail('It is not your turn, ' . $player);
 $result->free();
 

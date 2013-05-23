@@ -133,3 +133,30 @@ body {
 	z-index: 20;
 }
 
+#controls {
+	width: 100%;
+}
+#server_msg {
+	float: left;
+	margin: 6px 0 0 0;
+	padding: 5px;
+	border: 1px solid #ccc;
+	width: 50%;
+	height: 200px;
+}
+#game_info {
+	border: 2px dashed blue;
+	margin: 6px 0 0 0;
+	padding: 5px;
+	height: 200px;
+	overflow: hidden;
+}
+#games {
+	width: 50%;
+	height: 100%;
+}
+#requests {
+	overflow: hidden;
+	height: 100%;
+}
+

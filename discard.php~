@@ -57,7 +57,7 @@ if($nextID < 0 or $nextPlayer == '') fail('Could not retrieve next player: ' . $
 $response .= 'Next player = ' . $nextID . ' = ' . $nextPlayer . PHP_EOL;
 
 //set the role table so it is their turn
-if($mysqli->query('UPDATE RummyRoles SET PlayerID="' . $nextID . '" WHERE Role="TURN"') === FALSE) fail("Couldn't advance turn");
+if($mysqli->query('UPDATE RummyRoles SET PlayerID="' . $nextPlayer . '" WHERE Role="TURN"') === FALSE) fail("Couldn't advance turn");
 
 $mysqli->close();
 echo json_encode(array('response' => $response, 'card' => $newCard));
