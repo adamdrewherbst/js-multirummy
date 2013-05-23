@@ -36,14 +36,22 @@
 			</div>
 			<div id="control_panel">
 				<div id="controls">
-					<input type="text" id="nickname" size="20" placeholder="Enter nickname"></input>
-					<button id="start_button" type="button"></button>
+					<!--<input type="text" id="nickname" size="20" placeholder="Enter nickname"></input>
+					<button id="start_button" type="button"></button>-->
+					
 					<button id="rules_button" type="button">Rules</button>
+					<button id="stop_script" type="button">Stop Script</button>
 				</div>
 				<div id="server_msg"></div>
-				<div id="requests">
-					<h3>Requesting to join:</h3>
-					<ul id="request_list"></ul>
+				<div id="game_info">
+					<div id="games">
+						<h3>Existing Games</h3>
+						<ul id="game_list"></ul>
+					</div>
+					<div id="requests">
+						<h3>Requesting to join:</h3>
+						<ul id="request_list"></ul>
+					</div>
 				</div>
 				<!--<br/><input type="text" id="debug_text" size="100"></input>
 				<button id="debug_button" type="button">Debug Line</button>-->

@@ -143,6 +143,7 @@ body {
 	border: 1px solid #ccc;
 	width: 50%;
 	height: 200px;
+	overflow: auto;
 }
 #game_info {
 	border: 2px dashed blue;
@@ -152,6 +153,7 @@ body {
 	overflow: hidden;
 }
 #games {
+	float: left;
 	width: 50%;
 	height: 100%;
 }

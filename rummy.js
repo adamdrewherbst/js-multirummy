@@ -9,7 +9,7 @@ function resetGame() {
 	//set all buttons/messages back to initial state
 	$('#win_message').css({'visibility':'', 'font-size':''});
 	$('#rules_message').css({'visibility':'', 'pointer-events':''});
-	$('#start_button')[0].textContent = 'Deal Cards';
+	//$('#start_button')[0].textContent = 'Deal Cards';
 	//generate all 52 cards as a stack on the upper left
 	dealt = false;
 	currentTurn = '';
@@ -430,21 +430,68 @@ function failureAnimation() {
 	$winMessage.css({'visibility':'visible', 'font-size':'100px'});
 }
 
-//add a game to the list of those in progress - if notStarted, I can request to join it
-function addGame(name, notStarted) {
+//add a game to the list of those in progress - if not yet in progress, I can request to join it
+function addGame(name, inProgress) {
+	serverLog('got game ' + name + ', ' + inProgress);
 	currentGames.push(name);
-	var $game = $('<li><div class="game">' + name
-		+ (notStarted ? '<button type="button" class="join_game">Request to Join</button>' : '')
-		+ '</div></li>');
+	var $game = $('<li class="game">' + name + '</li>');
+	if((!inProgress || inProgress === '0') && name !== nickname) {
+		var $button = $('<button type="button" class="join_game">Request to Join</button>');
+		$button.click(join_request);
+		$game.append($button);
+	}
 	$('#game_list').append($game);
+}
+function join_request() {
+	var $this = $(this), par = this.parentNode, name = par.childNodes[0].nodeValue;
+	$.ajax({
+		url:'place_request.php',
+		data:{'player':nickname, 'game':name},
+		dataType:'json',
+		success: function(data) {
+			serverLog(data.response);
+			if(data.success) {
+				$this.remove();
+			}
+		},
+		error: function(jqXHR, textStatus, errorThrown) {
+			console.log('ajax - ' + textStatus + ': ' + errorThrown);
+		}
+	});
 }
 
 //add a request by player <name> to join this game
 function addRequest(name) {
 	currentRequests.push(name);
-	var $request = $('<li><div class="request">' + name + '<button type="button" class="accept_request">Accept</button>'
-		+ '<button type="button" class="reject_request">Reject</button></div></li>');
+	var $request = $('<li class="request">' + name + '</li>');
+	var $accept = $('<button type="button" class="accept_request">Accept</button>');
+	var $reject = $('<button type="button" class="reject_request">Reject</button>');
+	$accept.click(decide_request);
+	$reject.click(decide_request);
+	$request.append($accept);
+	$request.append($reject);
 	$('#request_list').append($request);
+}
+function decide_request() {
+	//get decision from class name
+	var decision = this.className.replace('_request', '');
+	var $parent = $(this).parent(), name = this.parentNode.childNodes[0].nodeValue;
+	$.ajax({
+		url:'process_request.php',
+		data:{'player':nickname, 'name':name, 'decision':decision},
+		dataType:'json',
+		success:function(data) {
+			serverLog(data.response);
+			serverLog(decision + 'ed ' + name);
+			if(data.success) {
+				$parent.remove();
+				currentRequests.splice(currentRequests.indexOf(name));
+			}
+		},
+		error: function(jqXHR, textStatus, errorThrown) {
+			console.log('ajax - ' + textStatus + ': ' + errorThrown);
+		}
+	});
 }
 
 //initiate the indefinite long-polling of the server to receive any updates (eg. when it's my turn)
@@ -456,7 +503,7 @@ function poll() {
 			'player':nickname,
 			'turn':currentTurn,
 			'winner':currentWinner,
-			'requests[]':currentRequests
+			'requests[]':currentRequests,
 			'games[]':currentGames
 		},
 		dataType:'json',
@@ -476,8 +523,11 @@ function poll() {
 				currentTurn = data.turn;
 				serverLog('It is now ' + (data.turn === nickname ? 'YOUR' : data.turn + "'s") + ' turn');
 			}
-			if(data.requesters) {
-				for(var i = 0; i < data.requesters.length; i++) addRequest(data.requesters[i]);
+			if(data.requests) {
+				for(var i = 0; i < data.requests.length; i++) addRequest(data.requests[i]);
+			}
+			if(data.games) {
+				for(var i = 0; i < data.games.length; i++) addGame(data.games[i][0], data.games[i][1]);
 			}
 		},
 		error: function(jqXHR, textStatus, errorThrown) {
@@ -497,24 +547,25 @@ function serverLog(str) {
 //all the setup is done from here
 $(document).ready(function() {
 
+	$('#stop_script').click(function() {
+		exit(0); //see exit routine at bottom - from http://stackoverflow.com/questions/550574/how-to-terminate-the-script-in-javascript
+	});
+
 	resetGame();
 	nickname = '';
 	while(nickname == '') {
-		while(nickname == '') {
-			nickname = prompt('Enter your nickname:');
-		}
+		nickname = prompt('Enter your nickname:');
+		if(nickname == '') return;
 		$.ajax({
 			url:'register.php',
 			async:false,
 			data:{'name':nickname},
+			dataType:'json',
 			success: function(data) {
 				serverLog(data.response);
 				if(!data.success) {
 					nickname = '';
 					return;
-				}
-				if(data.games) {
-					for(var i = 0; i < data.games.length; i++) addGame(data.games[i]);
 				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
@@ -523,8 +574,9 @@ $(document).ready(function() {
 		});
 	}
 	console.log('joining as ' + nickname);
+	poll(); //start polling the server for updates, eg. to the list of games we can join
 	
-	$.ajax({
+/*	$.ajax({
 		url:'join_game.php',
 		data:{'player':nickname},
 		dataType:'json',
@@ -538,6 +590,7 @@ $(document).ready(function() {
 		},
 		complete: function() {console.log('ajax complete');}
 	});
+//*/
 	
 	//need this to allow right-clicks on cards
 	$('#card_panel')[0].oncontextmenu = function(){return false;};
@@ -583,34 +636,13 @@ $(document).ready(function() {
 	$('#rules_button').click(toggle_rules);
 	$('#rules_message').click(toggle_rules);
 	
-	$('.join_game').click(function() {
-		var $this = $(this), $div = $this.parent(), name = $div.text();
+	$('.start_game').click(function() {
 		$.ajax({
-			url:'place_request.php',
-			data:{'player':nickname, 'game':name},
-			success:function() {
+			url:'new_game.php',
+			data:{'player':nickname},
+			dataType:'json',
+			success: function(data) {
 				serverLog(data.response);
-				if(data.success) {
-					$this.remove();
-				}
-			},
-			error: function(jqXHR, textStatus, errorThrown) {
-				console.log('ajax - ' + textStatus + ': ' + errorThrown);
-			}
-		});
-	});
-	$('.accept_request, .reject_request').click(function() {
-		//get decision from class name
-		var decision = this.className.replace('_request', '');
-		var $div = $(this).parent(), name = $div.text().split(' ')[0];
-		$.ajax({
-			url:'process_request.php',
-			data:{'player':nickname, 'name':name, 'decision':decision},
-			success:function() {
-				if(data.success) {
-					$div.remove();
-					currentRequests.splice(currentRequests.indexOf(name));
-				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
 				console.log('ajax - ' + textStatus + ': ' + errorThrown);
@@ -667,3 +699,44 @@ jQuery.fn.extend({
         });
     }
 });
+
+function exit( status ) {
+    // http://kevin.vanzonneveld.net
+    // +   original by: Brett Zamir (http://brettz9.blogspot.com)
+    // +      input by: Paul
+    // +   bugfixed by: Hyam Singer (http://www.impact-computing.com/)
+    // +   improved by: Philip Peterson
+    // +   bugfixed by: Brett Zamir (http://brettz9.blogspot.com)
+    // %        note 1: Should be considered expirimental. Please comment on this function.
+    // *     example 1: exit();
+    // *     returns 1: null
+
+    var i;
+
+    if (typeof status === 'string') {
+        alert(status);
+    }
+
+    window.addEventListener('error', function (e) {e.preventDefault();e.stopPropagation();}, false);
+
+    var handlers = [
+        'copy', 'cut', 'paste',
+        'beforeunload', 'blur', 'change', 'click', 'contextmenu', 'dblclick', 'focus', 'keydown', 'keypress', 'keyup', 'mousedown', 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'resize', 'scroll',
+        'DOMNodeInserted', 'DOMNodeRemoved', 'DOMNodeRemovedFromDocument', 'DOMNodeInsertedIntoDocument', 'DOMAttrModified', 'DOMCharacterDataModified', 'DOMElementNameChanged', 'DOMAttributeNameChanged', 'DOMActivate', 'DOMFocusIn', 'DOMFocusOut', 'online', 'offline', 'textInput',
+        'abort', 'close', 'dragdrop', 'load', 'paint', 'reset', 'select', 'submit', 'unload'
+    ];
+
+    function stopPropagation (e) {
+        e.stopPropagation();
+        // e.preventDefault(); // Stop for the form controls, etc., too?
+    }
+    for (i=0; i < handlers.length; i++) {
+        window.addEventListener(handlers[i], function (e) {stopPropagation(e);}, true);
+    }
+
+    if (window.stop) {
+        window.stop();
+    }
+
+    throw '';
+}

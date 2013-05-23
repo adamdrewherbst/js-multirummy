@@ -51,19 +51,18 @@ if($win) $win = $setCount > 2; //make sure last set is also valid
 $response .= 'Win: ' . ($win ? 'yes' : 'no') . PHP_EOL;
 
 if($win) { //alert everyone that this player wins via the RummyRoles table - this will also make sure no one else has won in the meantime
-	if($mysqli->query('LOCK TABLES RummyRoles') === FALSE) fail('Could not lock role table');
+	if($mysqli->query('LOCK TABLES RummyRole') === FALSE) fail('Could not lock role table');
 	$winner = '';
-	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRoles WHERE Role="WINNER"')) === FALSE) 
+	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRole WHERE Role="WINNER"')) === FALSE) 
 		$response .= 'Could not look up current winner' . PHP_EOL;
 	elseif($row = $result->fetch_row()) $winner = $row[0];
-	if($winner === NULL and $mysqli->query('UPDATE RummyRoles SET PlayerID="' . $player . '" WHERE Role="WINNER"') === FALSE)
+	if($winner === NULL and $mysqli->query('UPDATE RummyRole SET PlayerID="' . $player . '" WHERE Role="WINNER"') === FALSE)
 		$response .= 'Could not update winner field to ' . $player . PHP_EOL;
 	elseif(strlen($winner) > 0) $response .= $winner . ' has already won' . PHP_EOL;
 	if($mysqli->query('UNLOCK TABLES') === FALSE) fail('Could not unlock role table');
 }
 
-$mysqli->close();
-echo json_encode(array('response' => $response, 'win' => $win));
+succeed(array('win' => $win));
 
 ?>
 

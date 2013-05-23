@@ -6,7 +6,7 @@ global $mysqli, $response, $player, $playerID;
 
 //make sure it is this player's turn
 $query = 'SELECT PlayerID FROM RummyRoles WHERE Role="TURN"';
-if(!($result = $mysqli->query($query)) or !($row = $result->fetch_row()) or $row[0] !== $playerID)
+if(!($result = $mysqli->query($query)) or !($row = $result->fetch_row()) or $row[0] !== $player)
 	fail('It is not your turn, ' . $player);
 $result->free();
 
@@ -59,8 +59,7 @@ $response .= 'Next player = ' . $nextID . ' = ' . $nextPlayer . PHP_EOL;
 //set the role table so it is their turn
 if($mysqli->query('UPDATE RummyRoles SET PlayerID="' . $nextPlayer . '" WHERE Role="TURN"') === FALSE) fail("Couldn't advance turn");
 
-$mysqli->close();
-echo json_encode(array('response' => $response, 'card' => $newCard));
+succeed(array('card' => $newCard));
 
 ?>
 

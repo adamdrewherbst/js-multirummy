@@ -18,27 +18,22 @@ function initTable($tbl, $cols, $keycol, $extra = '') {
 	return $response;
 }
 
+//ensure game table is initialized
+$cols = array(
+	array('name' => 'ID', 'type' => 'SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT'),
+	array('name' => 'Name', 'type' => 'VARCHAR(30)'),
+	array('name' => 'InProgress', 'type' => 'BOOL'),
+);
+initTable('RummyGame', $cols, 'ID', 'UNIQUE(Name)');
+
 //ensure deck table is initialized
 $cols = array( //for each card we want its ID and whose hand/which pile it is currently in
 	array('name' => 'ID', 'type' => 'TINYINT UNSIGNED NOT NULL AUTO_INCREMENT'), //preserve the deck order for queries
+	array('name' => 'GameID', 'type' => 'SMALLINT UNSIGNED'),
 	array('name' => 'CardID', 'type' => 'TINYINT UNSIGNED'),
 	array('name' => 'Pile', 'type' => 'VARCHAR(30)'),
 );
-$tbl = 'RummyDeck';
-$keycol = 'CardID';
-initTable($tbl, $cols, 'ID');
-
-//...and that it has cards
-$query = 'SELECT ' . $keycol . ' FROM ' . $tbl;
-if(!($result = $mysqli->query($query)) or $result->num_rows == 0) {
-	$cards = range(0, DECK_SIZE-1);
-	shuffle($cards);
-	foreach($cards as $card) {
-		$query = 'INSERT INTO ' . $tbl . ' (' . $keycol . ') VALUES (' . $card . ')';
-		if($mysqli->query($query) === TRUE) $response .= sprintf("Card %d successfully added.\n", $card);
-		else $response .= sprintf("Could not add card %d\n", $card);
-	}
-}
+initTable('RummyDeck', $cols, 'ID');
 
 //ensure player table is initialized
 $cols = array(
@@ -52,11 +47,11 @@ initTable('RummyPlayer', $cols, 'ID', 'UNIQUE(NickName)');
 
 //ensure role table is initialized (stores the player corresponding to each of several roles in the game)
 $cols = array(
+	array('name' => 'GameID', 'type' => 'SMALLINT UNSIGNED'),
 	array('name' => 'Role', 'type' => 'VARCHAR(30)'),
 	array('name' => 'PlayerID', 'type' => 'VARCHAR(30)'),
 );
-initTable('RummyRoles', $cols, 'Role');
-$mysqli->query('INSERT INTO RummyRoles(Role) VALUES ("TURN"),("WINNER")');
+initTable('RummyRole', $cols, 'GameID,Role');
 
 //create the stored procedure needed to deal a specified number of cards and return the card values
 $query = 'CREATE PROCEDURE deal_cards(IN player VARCHAR(30), IN number TINYINT UNSIGNED) BEGIN'

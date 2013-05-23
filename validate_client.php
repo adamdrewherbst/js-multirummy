@@ -4,8 +4,9 @@ global $mysqli;
 
 //make sure this client is listed in the player table
 $player = $_GET['player'];
+if($player == '') $player = $_POST['player'];
 $playerID = -1;
-$gameID = null;
+$gameID = NULL;
 $client = $_SERVER['REMOTE_ADDR'];
 $query = 'SELECT ID,NickName,GameID FROM RummyPlayer WHERE ClientIP="' . $client . '"';
 if(($result = $mysqli->query($query)) !== FALSE) {
@@ -26,8 +27,12 @@ else fail("Couldn't query player table for IP " . $client);
 
 //check if this player is the owner of this game - store in $isOwner for use by clients
 $isOwner = false;
-if(($result = $mysqli->query('SELECT PlayerID FROM RummyRoles WHERE Role="OWNER"')) !== FALSE and ($row = $result->fetch_row()))
-	$isOwner = $row[0] === $player;
-else fail('Could not determine owner of this game');
+if($gameID !== NULL) {
+	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRole WHERE GameID='.$gameID.' AND Role="OWNER"')) !== FALSE
+		and ($row = $result->fetch_row())) $isOwner = $row[0] === $player;
+	else fail('Could not determine owner of this game');
+	if($isOwner) addResponse('You are the game owner');
+}
+else addResponse('Not in a game yet');
 
 ?>
