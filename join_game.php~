@@ -32,10 +32,10 @@ if(($players = $mysqli->query($query)) !== FALSE) {
 	$response .= '</table>';
 	
 	//if this is the first player, make it their turn
-	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRoles WHERE Role="TURN"')) !== FALSE and ($row = $result->fetch_row()))
+	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRole WHERE Role="TURN"')) !== FALSE and ($row = $result->fetch_row()))
 		$currentTurn = $row[0];
 	else fail("Couldn't get current turn");
-	if($currentTurn === NULL and $mysqli->query('UPDATE RummyRoles SET PlayerID="' . $player . '" WHERE Role="TURN"') === FALSE)
+	if($currentTurn === NULL and $mysqli->query('UPDATE RummyRole SET PlayerID="' . $player . '" WHERE Role="TURN"') === FALSE)
 		fail('Could not set turn to ' . $player);
 }
 

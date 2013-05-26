@@ -5,18 +5,11 @@ include 'validate_client.php';
 global $mysqli, $response, $player, $playerID;
 
 //make sure it is this player's turn
-$query = 'SELECT PlayerID FROM RummyRoles WHERE Role="TURN"';
-if(!($result = $mysqli->query($query)) or !($row = $result->fetch_row()) or $row[0] !== $player)
-	fail('It is not your turn, ' . $player);
-$result->free();
+if(single('PlayerID', 'RummyRoles', 'Role="TURN"') !== $player) fail('It is not your turn, ' . $player);
 
 //and that they actually have the card they want to discard
 $card = $_GET['card'];
-$hasCard = false;
-$query = 'SELECT Pile FROM RummyDeck WHERE CardID=' . $card;
-if(!($result = $mysqli->query($query)) or !($row = $result->fetch_row()) or $row[0] !== $player)
-	fail('Player ' . $player . ' does not have card ' . $card);
-$result->free();
+if(single('Pile', 'RummyDeck', 'CardID='.$card) !== $player) fail('Player ' . $player . ' does not have card ' . $card);
 
 //determine the next card from the stack to deal
 $newCard = -1;
@@ -47,14 +40,9 @@ if($mysqli->multi_query($query) !== FALSE) {
 else fail('Could not get next player index');
 
 //get the name of the next player
-if($nextID >= 0 and ($result = $mysqli->query('SELECT NickName FROM RummyPlayer WHERE ID=' . $nextID)) !== FALSE) {
-	if(($row = $result->fetch_row()) !== NULL) $nextPlayer = $row[0];
-}
-else fail('Could not retrieve next player for ID = ' . $nextID);
-$result->free();
-
+$nextPlayer = single('NickName', 'RummyPlayer', 'ID='.$nextID);
 if($nextID < 0 or $nextPlayer == '') fail('Could not retrieve next player: ' . $nextID . ' = ' . $nextPlayer);//*/
-$response .= 'Next player = ' . $nextID . ' = ' . $nextPlayer . PHP_EOL;
+addResponse('Next player = ' . $nextID . ' = ' . $nextPlayer);
 
 //set the role table so it is their turn
 if($mysqli->query('UPDATE RummyRole SET PlayerID="' . $nextPlayer . '" WHERE Role="TURN"') === FALSE) fail("Couldn't advance turn");

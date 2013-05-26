@@ -50,7 +50,8 @@ foreach($hand as $card) {
 if($win) $win = $setCount > 2; //make sure last set is also valid
 $response .= 'Win: ' . ($win ? 'yes' : 'no') . PHP_EOL;
 
-if($win) { //alert everyone that this player wins via the RummyRoles table - this will also make sure no one else has won in the meantime
+if($win) {
+	//alert everyone that this player wins via the RummyRoles table - this will also make sure no one else has won in the meantime
 	if($mysqli->query('LOCK TABLES RummyRole') === FALSE) fail('Could not lock role table');
 	$winner = '';
 	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRole WHERE Role="WINNER"')) === FALSE) 
@@ -60,6 +61,8 @@ if($win) { //alert everyone that this player wins via the RummyRoles table - thi
 		$response .= 'Could not update winner field to ' . $player . PHP_EOL;
 	elseif(strlen($winner) > 0) $response .= $winner . ' has already won' . PHP_EOL;
 	if($mysqli->query('UNLOCK TABLES') === FALSE) fail('Could not unlock role table');
+	//this game is no longer in progress, so people can request to join the room
+	if($mysqli->query('UPDATE RummyGame SET InProgress=FALSE WHERE ID='.$gameID) === FALSE) fail('Could not set game back to not started');
 }
 
 succeed(array('win' => $win));

@@ -2,8 +2,18 @@
 var suits = ['Clubs', 'Spades', 'Diamonds', 'Hearts']
 var numbers = ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Jack', 'Queen', 'King', 'Ace'];
 var numCards = suits.length * numbers.length, handSize = 7, dealt = false;
-var nickname; //username in the game room
-var currentTurn, currentWinner, currentRequests, currentGames; //what I think is the current game state, so the server can tell me when it changes
+//what I think is the current game state, so the server can tell me when it changes
+var state = {
+	nickname:'', //my state.nickname in the game room
+	game:'', //game I am part of
+	hand: {}, //my current hand
+	owner:'', //owner of my game
+	turn:'', //player whose turn it is
+	winner:'', //player who has won my game
+	games:{}, //all existing games - key = name of game, value = game attributes [eg. inProgress]
+	request:'', //game I am requesting to join
+	requests:{} //all requests to join my game, if I am the owner - key = name of requester, val = nothing yet
+};
 
 function resetGame() {
 	//set all buttons/messages back to initial state
@@ -12,10 +22,6 @@ function resetGame() {
 	//$('#start_button')[0].textContent = 'Deal Cards';
 	//generate all 52 cards as a stack on the upper left
 	dealt = false;
-	currentTurn = '';
-	currentWinner = '';
-	currentRequests = [];
-	currentGames = [];
 	$('div.pile > .inner').empty(); //the inner div of a pile holds its cards
 	$stack = $('#stack');
 	//make an array of the numbers 0-51
@@ -100,7 +106,7 @@ function resetGame() {
 					else {
 						$.ajax({
 							url:'discard.php',
-							data:{'player':nickname, 'card':$this.attr('index')},
+							data:{'nickname':state.nickname, 'card':$this.attr('index')},
 							dataType:'json',
 							success: function(data) {
 								console.log('ajax success');
@@ -197,11 +203,18 @@ function deal(hand) {
 }
 //send the top card from the deck to the hand
 function dealCard(index, delay=0) {
+	state.hand[index] = [];
 	var $card = getCard(index);
 	console.log('dealing ' + index + '=' + cardName($card));
 	$card.detach().appendTo('#stack > .inner');
 	$card.attr('dealt','true');
 	moveCard($card, 'hand', delay);
+}
+function discardCard(index, delay=0) {
+	delete state.hand[index];
+	var $card = getCard(index);
+	console.log('discarding ' + index + '=' + cardName($card));
+	moveCard($card, 'discard', delay);
 }
 function topCard() {
 	var $stack = $('#stack > .inner > .card[dealt="false"]');
@@ -353,7 +366,7 @@ function checkWin() {
 	$.ajax({
 		url:'check_win.php',
 		async: false,
-		data:{'player':nickname, 'hand':hand},
+		data:{'nickname':state.nickname, 'hand':hand},
 		dataType: 'json',
 		success: function(data) {
 			console.log('ajax success');
@@ -430,28 +443,30 @@ function failureAnimation() {
 	$winMessage.css({'visibility':'visible', 'font-size':'100px'});
 }
 
-//add a game to the list of those in progress - if not yet in progress, I can request to join it
+//add a game to the list - if not yet in progress, I can request to join it
 function addGame(name, inProgress) {
 	serverLog('got game ' + name + ', ' + inProgress);
-	currentGames.push(name);
-	var $game = $('<li class="game">' + name + '</li>');
-	if((!inProgress || inProgress === '0') && name !== nickname) {
-		var $button = $('<button type="button" class="join_game">Request to Join</button>');
-		$button.click(join_request);
-		$game.append($button);
-	}
+	state.games[name] = [inProgress];
+	var $game = $('<li class="game" name="' + name + '">' + name + '</li>');
+	var $button = $('<button type="button" class="join_game" name="' + name + '">Request to Join</button>');
+	$button.click(join_request);
+	if((!inProgress || inProgress === '0') && name !== state.nickname) $button.css('visibility', 'visible');
+	else $button.css('visibility', 'hidden');
+	$game.append($button);
 	$('#game_list').append($game);
 }
+//request to join a game upon clicking the Join button
 function join_request() {
 	var $this = $(this), par = this.parentNode, name = par.childNodes[0].nodeValue;
 	$.ajax({
 		url:'place_request.php',
-		data:{'player':nickname, 'game':name},
+		data:{'nickname':state.nickname, 'game':name},
 		dataType:'json',
 		success: function(data) {
 			serverLog(data.response);
 			if(data.success) {
-				$this.remove();
+				//remove the Join button once the request is placed
+				$this.css('visibility', 'hidden');
 			}
 		},
 		error: function(jqXHR, textStatus, errorThrown) {
@@ -459,11 +474,21 @@ function join_request() {
 		}
 	});
 }
+function removeGame(name) {
+	serverLog('game ' + name + ' is over');
+	delete state.games[name];
+	$('li[.game name="' + name + '"]').remove();
+}
+function setInProgress(name, inProgress) {
+	state.games[name] = inProgress;
+	if(!inProgress || inProgress === '0') $('button[.join_game][name="' + name + '"]').css('visibility', 'hidden');
+	else $('button[.join_game][name="' + name + '"]').css('visibility', 'visible');
+}
 
 //add a request by player <name> to join this game
 function addRequest(name) {
-	currentRequests.push(name);
-	var $request = $('<li class="request">' + name + '</li>');
+	state.requests[name] = [1];
+	var $request = $('<li class="request" name="' + name + '">' + name + '</li>');
 	var $accept = $('<button type="button" class="accept_request">Accept</button>');
 	var $reject = $('<button type="button" class="reject_request">Reject</button>');
 	$accept.click(decide_request);
@@ -475,17 +500,17 @@ function addRequest(name) {
 function decide_request() {
 	//get decision from class name
 	var decision = this.className.replace('_request', '');
-	var $parent = $(this).parent(), name = this.parentNode.childNodes[0].nodeValue;
+	var $parent = $(this).parent(), name = $parent.attr('name');
 	$.ajax({
 		url:'process_request.php',
-		data:{'player':nickname, 'name':name, 'decision':decision},
+		data:{'nickname':state.nickname, 'name':name, 'decision':decision},
 		dataType:'json',
 		success:function(data) {
 			serverLog(data.response);
 			serverLog(decision + 'ed ' + name);
 			if(data.success) {
 				$parent.remove();
-				currentRequests.splice(currentRequests.indexOf(name));
+				delete state.requests[name];
 			}
 		},
 		error: function(jqXHR, textStatus, errorThrown) {
@@ -493,41 +518,74 @@ function decide_request() {
 		}
 	});
 }
+function removeRequest(name) {
+	serverLog('request by ' + name + ' has been rescinded');
+	delete state.requests[name];
+	$('li[.request][name="' + name + '"]').remove();
+}
 
 //initiate the indefinite long-polling of the server to receive any updates (eg. when it's my turn)
 function poll() {
+	//console.log('request: ' + state.request + ' [' + state.request.length + ']');
+	//console.log('sending: ' + JSON.stringify(state));
 	$.ajax({
 		url:'long_poll.php',
 		type: 'POST',
-		data: { //pass what I think is the current game state - server will send updates if there are any
-			'player':nickname,
-			'turn':currentTurn,
-			'winner':currentWinner,
-			'requests[]':currentRequests,
-			'games[]':currentGames
-		},
+		data: state, //pass what I think is the current game state - server will send updates if there are any
 		dataType:'json',
 		success: function(data) {
 			serverLog(data.response);
-			if(data.hand && !dealt) {
-				var hand = '';
-				for(var c = 0; c < data.hand.length; c++) hand += data.hand[c] + ' ';
-				serverLog('hand: ' + hand);
-				deal(data.hand);
+			if(data.hasOwnProperty('game')) {
+				setState('game', data);
+				if(!isNull(state.game)) {
+					serverLog('You are now part of game ' + state.game);
+					$('#create_game').css('visibility', 'hidden');
+					$('.join_game').css('visibility', 'hidden'); //disable all Join buttons while in a game
+					$('#leave_game').css('visibility', 'visible');
+				}else {
+					serverLog('You have left the game');
+					$('.join_game').css('visibility', 'visible');
+				}
 			}
-			if(data.winner) {
-				currentWinner = data.winner;
+			if(data.hasOwnProperty('request')) {
+				if(isNull(data.request) && state.game == '') {
+					serverLog('Request to join ' + state.request + ' was denied');
+					$('.join_game').css('visibility', 'visible');
+				}
+				setState('request', data);
+			}
+			if(data.hasOwnProperty('owner')) {
+				setState('owner', data);
+				serverLog('Game owner has been changed to ' + data.owner);
+			}
+			if(data.hasOwnProperty('turn')) {
+				setState('turn', data);
+				serverLog('It is now ' + (data.turn === state.nickname ? 'YOUR' : data.turn + "'s") + ' turn');
+			}
+			if(data.hasOwnProperty('winner')) {
+				setState('winner', data);
 				serverLog(data.winner + ' wins!');
 			}
-			if(data.turn) {
-				currentTurn = data.turn;
-				serverLog('It is now ' + (data.turn === nickname ? 'YOUR' : data.turn + "'s") + ' turn');
+			//fields with multiple values are returned from the server in the form:
+			//  [number of values removed since last update, values removed since last update, values added since last update]
+			if(data.hasOwnProperty('hand')) {
+				var i;
+				for(i = 1; i < 1+data.hand[0]; i++) discardCard(data.hand[i][0]);
+				for(; i < data.hand.length; i++) dealCard(data.hand[i][0]);
 			}
-			if(data.requests) {
-				for(var i = 0; i < data.requests.length; i++) addRequest(data.requests[i]);
+			if(data.hasOwnProperty('requests')) {
+				var i;
+				for(i = 1; i < 1+data.requests[0]; i++) removeRequest(data.requests[i][0]);
+				for(; i < data.requests.length; i++) addRequest(data.requests[i][0]);
 			}
-			if(data.games) {
-				for(var i = 0; i < data.games.length; i++) addGame(data.games[i][0], data.games[i][1]);
+			if(data.hasOwnProperty('games')) {
+				var i;
+				for(i = 1; i < 1+data.games[0]; i++) removeGame(data.games[i][0]);
+				for(; i < data.games.length; i++) {
+					if(state.games.hasOwnProperty(data.games[i][0]))
+						setInProgress(data.games[i][0], data.games[i][1]);
+					else addGame(data.games[i][0], data.games[i][1]);
+				}
 			}
 		},
 		error: function(jqXHR, textStatus, errorThrown) {
@@ -543,6 +601,14 @@ function serverLog(str) {
 		div.innerHTML = arr[i] + '<br />' + div.innerHTML;
 	}
 }
+function isNull(val) {
+	return val == '' || val === undefined || val === null;
+}
+function setState(key, data) {
+	console.log('setting ' + key);
+	if(isNull(data[key])) state[key] = '';
+	else state[key] = data[key];
+}
 
 //all the setup is done from here
 $(document).ready(function() {
@@ -552,19 +618,19 @@ $(document).ready(function() {
 	});
 
 	resetGame();
-	nickname = '';
-	while(nickname == '') {
-		nickname = prompt('Enter your nickname:');
-		if(nickname == '') return;
+	var promptStr = 'Enter your nickname.';
+	while(state.nickname == '') {
+		state.nickname = prompt(promptStr);
+		if(state.nickname == '') return;
 		$.ajax({
 			url:'register.php',
 			async:false,
-			data:{'name':nickname},
+			data:{'name':state.nickname},
 			dataType:'json',
 			success: function(data) {
 				serverLog(data.response);
 				if(!data.success) {
-					nickname = '';
+					state.nickname = '';
 					return;
 				}
 			},
@@ -572,13 +638,14 @@ $(document).ready(function() {
 				console.log('ajax - ' + textStatus + ': ' + errorThrown);
 			}
 		});
+		promptStr = 'Name is already taken. Enter your nickname.';
 	}
-	console.log('joining as ' + nickname);
+	console.log('joining as ' + state.nickname);
 	poll(); //start polling the server for updates, eg. to the list of games we can join
 	
 /*	$.ajax({
 		url:'join_game.php',
-		data:{'player':nickname},
+		data:{'player':state.nickname},
 		dataType:'json',
 		success: function(data) {
 			console.log('ajax success');
@@ -603,12 +670,12 @@ $(document).ready(function() {
 	//start button toggles to the Reset button once the game is started
 	$('#start_button').html('Join Game');
 	$('#start_button').click(function() {
-		nickname = $('#nickname').val();
-		if(nickname.length > 0) {
-			console.log('joining as ' + nickname);
+		state.nickname = $('#nickname').val();
+		if(state.nickname.length > 0) {
+			console.log('joining as ' + state.nickname);
 			$.ajax({
 				url:'join_game.php',
-				data:{'player':nickname},
+				data:{'nickname':state.nickname},
 				dataType:'json',
 				success: function(data) {
 					console.log('ajax success');
@@ -636,13 +703,57 @@ $(document).ready(function() {
 	$('#rules_button').click(toggle_rules);
 	$('#rules_message').click(toggle_rules);
 	
-	$('.start_game').click(function() {
+	$('#create_game').css('visibility', 'visible');
+	$('#create_game').click(function() {
+		var $this = $(this);
 		$.ajax({
 			url:'new_game.php',
-			data:{'player':nickname},
+			data:{'nickname':state.nickname},
 			dataType:'json',
 			success: function(data) {
 				serverLog(data.response);
+				if(data.success) {
+					$this.css('visibility', 'hidden');
+					$('#begin_game').css('visibility', 'visible');
+					$('#leave_game').css('visibility', 'visible');
+				}
+			},
+			error: function(jqXHR, textStatus, errorThrown) {
+				console.log('ajax - ' + textStatus + ': ' + errorThrown);
+			}
+		});
+	});
+	
+	$('#begin_game').css('visibility', 'hidden');
+	$('#begin_game').click(function() {
+		var $this = $(this);
+		$.ajax({
+			url:'begin_game.php',
+			data:{'nickname':state.nickname},
+			dataType:'json',
+			success: function(data) {
+				serverLog(data.response);
+				if(data.success) {
+					$this.css('visibility', 'hidden');
+				}
+			},
+			error: function(jqXHR, textStatus, errorThrown) {
+				console.log('ajax - ' + textStatus + ': ' + errorThrown);
+			}
+		});
+	});
+	
+	$('#leave_game').css('visibility', 'hidden');
+	$('#leave_game').click(function() {
+		$.ajax({
+			url:'leave_game.php',
+			data:{'nickname':state.nickname},
+			dataType:'json',
+			success: function(data) {
+				serverLog(data.response);
+				if(data.success) {
+					$this.css('visibility', 'hidden');
+				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
 				console.log('ajax - ' + textStatus + ': ' + errorThrown);

@@ -7,7 +7,7 @@ global $response;
 //ensure RummyDeck and RummyPlayer tables are initialized
 include 'init_tables.php';
 
-$player = $_GET['player'];
+$player = $_GET['nickname'];
 
 //add the new player
 $query = 'INSERT INTO RummyPlayer (NickName, ClientIP) VALUES ("' . $player . '", "' . $_SERVER['REMOTE_ADDR'] .'")';
