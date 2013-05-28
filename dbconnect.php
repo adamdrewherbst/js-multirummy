@@ -10,6 +10,8 @@ $numbers = array('Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'
 function fail($msg, $unlock = false) {
 	global $mysqli, $response, $result;
 	$response .= $msg . PHP_EOL;
+	//if($mysqli->errno != 0)
+		addResponse('  Error: ' . $mysqli->errno . ' - ' . $mysqli->error);
 	echo json_encode(array('failure' => true, 'response' => $response));
 	if($result !== null and get_class($result) === 'mysqli_result') $result->free();
 	if($unlock) $mysqli->query('UNLOCK TABLES');
@@ -65,17 +67,58 @@ function multiple_list($select, $from, $where, $fail = true) {
 	}
 	elseif($fail) fail('Query failed: ' . $query, true);
 }
+//for updates/inserts/deletes
+function update($tbl, $set, $where, $fail = true) {
+	global $mysqli, $response;
+	$query = 'UPDATE ' . $tbl . ' SET ' . $set;
+	if($where != '') $query .= ' WHERE ' . $where;
+	if($mysqli->query($query) === FALSE && $fail)
+		fail('Query failed: ' . $query);
+}
+function insert($tbl, $cols, $vals, $fail = true) {
+	global $mysqli, $response;
+	$query = 'INSERT INTO ' . $tbl . ' (' . $cols . ') VALUES ' . $vals;
+	if($mysqli->query($query) === FALSE && $fail)
+		fail('Query failed: ' . $query);
+}
+function delete($tbl, $where, $fail = true) {
+	global $mysqli, $response;
+	$query = 'DELETE FROM ' . $tbl;
+	if($where != '') $query .= ' WHERE ' . $where;
+	if($mysqli->query($query) === FALSE && $fail)
+		fail('Query failed: ' . $query);
+}
+function lock($tbl, $type, $fail = true) {
+	global $mysqli, $response;
+	$query = 'LOCK TABLES ';
+	$tbl = explode(',', $tbl);
+	for($i = 0; $i < count($tbl); $i++) {
+		$query .= $tbl[$i] . ($type != '' ? ' '.$type : '');
+		if($i < count($tbl)-1) $query .= ', ';
+	}
+	if($mysqli->query($query) === FALSE && $fail)
+		fail('Query failed: ' . $query);
+}
+function unlock($fail = true) {
+	global $mysqli, $response;
+	$query = 'UNLOCK TABLES';
+	if($mysqli->query($query) === FALSE && $fail)
+		fail('Query failed: ' . $query);
+}
 
 //now connect to the MySQL 'games' database
-$user = 'root';
-$pass = 'tsup**dl3';
-//*/
-/*$user = '1380903';
+$user = '1380903_games';
 $pass = 'playtime';
+$db = '1380903_games';
+$server = 'pdb7.biz.nf';
+//*/
+/*$user = 'root';
+$pass = 'tsup**dl3';
+$db = 'games';
+$server = 'localhost';
 //*/
 
-$db = 'games';
-$mysqli = new mysqli('localhost', $user, $pass, $db);
+$mysqli = new mysqli($server, $user, $pass, $db);
 if($mysqli->connect_errno) {
 	fail('Could not connect to database');
 }

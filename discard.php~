@@ -2,42 +2,29 @@
 
 include 'dbconnect.php';
 include 'validate_client.php';
-global $mysqli, $response, $player, $playerID;
+global $mysqli, $response, $player, $playerID, $gameID;
 
 //make sure it is this player's turn
-if(single('PlayerID', 'RummyRoles', 'Role="TURN"') !== $player) fail('It is not your turn, ' . $player);
+if(single('PlayerID', 'RummyRole', 'GameID='.$gameID.' AND Role="TURN"') !== $player) fail('It is not your turn, ' . $player);
 
 //and that they actually have the card they want to discard
 $card = $_GET['card'];
-if(single('Pile', 'RummyDeck', 'CardID='.$card) !== $player) fail('Player ' . $player . ' does not have card ' . $card);
+if(single('Pile', 'RummyDeck', 'GameID='.$gameID.' AND CardID='.$card) !== $player) fail('Player ' . $player . ' does not have card ' . $card);
 
-//determine the next card from the stack to deal
-$newCard = -1;
-$query = 'UPDATE RummyDeck SET Pile="<discard>" WHERE CardID=' . $card;
-if(!$mysqli->query($query)) fail('Discard operation failed');
-$query = 'CALL deal_cards("' . $player . '", 1)';
-if(($result = $mysqli->query($query)) !== FALSE) {
-	if(($row = $result->fetch_row())) $newCard = $row[0];
-	while($mysqli->next_result()); //the deal_cards procedure has additional queries in it - need to get past those results
+//put the next available card into this player's hand
+lock('RummyDeck', 'WRITE');
+$nextCard = single('CardID', 'RummyDeck', 'GameID='.$gameID.' AND ISNULL(Pile) ORDER BY ID LIMIT 1');
+if($nextCard !== NULL) {
+	update('RummyDeck', 'Pile="<discard>"', 'GameID='.$gameID.' AND CardID='.$card);
+	update('RummyDeck', 'Pile="'.$player.'"', 'GameID='.$gameID.' AND ISNULL(Pile) LIMIT 1');
 }
-else fail('Could not get card to deal');
-$result->free();
-$response .= 'Dealing card ' . $newCard . PHP_EOL;
+else fail('No more cards to deal');
+unlock();
 
 //get the next player in the table, or first if there is no next
-$nextID = -1;
-$nextPlayer = '';
-$query = 'SELECT MIN(ID) FROM RummyPlayer WHERE ID > ' . $playerID . '; SELECT ID FROM RummyPlayer ORDER BY ID LIMIT 1';
-if($mysqli->multi_query($query) !== FALSE) {
-	do {
-		if(($result = $mysqli->store_result()) !== FALSE and ($row = $result->fetch_row()) !== NULL) {
-			if(!$nextID or $nextID < 0) $nextID = $row[0];
-			$response .= 'Using next ID = ' . $nextID . PHP_EOL;
-			$result->free();
-		}
-	}while($mysqli->next_result());
-}
-else fail('Could not get next player index');
+$nextID = single('MIN(ID)', 'RummyPlayer', 'GameID='.$gameID.' AND ID > '.$playerID);
+if($nextID == NULL) $nextID = single('ID', 'RummyPlayer', 'GameID='.$gameID.' ORDER BY ID LIMIT 1');
+if($nextID == NULL) fail('Could not get next player index');
 
 //get the name of the next player
 $nextPlayer = single('NickName', 'RummyPlayer', 'ID='.$nextID);
@@ -45,9 +32,9 @@ if($nextID < 0 or $nextPlayer == '') fail('Could not retrieve next player: ' . $
 addResponse('Next player = ' . $nextID . ' = ' . $nextPlayer);
 
 //set the role table so it is their turn
-if($mysqli->query('UPDATE RummyRole SET PlayerID="' . $nextPlayer . '" WHERE Role="TURN"') === FALSE) fail("Couldn't advance turn");
+update('RummyRole', 'PlayerID="'.$nextPlayer.'"', 'GameID='.$gameID.' AND Role="TURN"');
 
-succeed(array('card' => $newCard));
+succeed(array('success' => true));
 
 ?>
 

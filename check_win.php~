@@ -7,13 +7,10 @@ global $mysqli, $response, $player, $playerID, $suits, $numbers;
 
 //make sure the list of cards they sent is the same list we have on file for them
 $hand = explode(',', $_GET['hand']);
-$query = 'SELECT CardID FROM RummyDeck WHERE Pile="' . $player . '"';
-if(($result = $mysqli->query($query)) === FALSE) fail('Could not get existing hand for ' . $player);
-$curHand = array();
-while($row = $result->fetch_row()) $curHand[] = $row[0];
+$curHand = multiple('CardID', 'RummyDeck', 'Pile="'.$player.'"');
 $handSize = count($curHand);
 $response .= 'Sent: ' . $_GET['hand'] . PHP_EOL . 'Have: ' . implode(',', $curHand) . PHP_EOL;
-if(count($hand) !== $handSize and count(array_intersect($hand, $curHand)) !== $handSize)
+if(count($hand) !== HAND_SIZE or count(array_intersect($hand, $curHand)) !== HAND_SIZE)
 	fail('The hand you sent is incorrect');
 
 //now check the order of the hand they sent
@@ -25,8 +22,8 @@ foreach($hand as $card) {
 	$suit = (int)($card / count($numbers));
 	$number = $card % count($numbers);
 	$match = -1;
-	$response .= 'Checking ' . $numbers[$number] . ' of ' . $suits[$suit] . PHP_EOL;
-	$response .= "\ttype = " . $setType . ", count = " . $setCount . PHP_EOL;
+	addResponse('Checking ' . $numbers[$number] . ' of ' . $suits[$suit]);
+	addResponse("\ttype = " . $setType . ", count = " . $setCount);
 	if($lastSuit >= 0) {
 		if($suit === $lastSuit and ($number === $lastNumber+1 or ($number === 0 and $lastNumber === 12))) $match = 1; //run
 		elseif($number === $lastNumber) $match = 2; //group
@@ -48,21 +45,17 @@ foreach($hand as $card) {
 	$lastNumber = $number;
 }
 if($win) $win = $setCount > 2; //make sure last set is also valid
-$response .= 'Win: ' . ($win ? 'yes' : 'no') . PHP_EOL;
+addResponse('Win: ' . ($win ? 'yes' : 'no'));
 
 if($win) {
 	//alert everyone that this player wins via the RummyRoles table - this will also make sure no one else has won in the meantime
-	if($mysqli->query('LOCK TABLES RummyRole') === FALSE) fail('Could not lock role table');
-	$winner = '';
-	if(($result = $mysqli->query('SELECT PlayerID FROM RummyRole WHERE Role="WINNER"')) === FALSE) 
-		$response .= 'Could not look up current winner' . PHP_EOL;
-	elseif($row = $result->fetch_row()) $winner = $row[0];
-	if($winner === NULL and $mysqli->query('UPDATE RummyRole SET PlayerID="' . $player . '" WHERE Role="WINNER"') === FALSE)
-		$response .= 'Could not update winner field to ' . $player . PHP_EOL;
-	elseif(strlen($winner) > 0) $response .= $winner . ' has already won' . PHP_EOL;
-	if($mysqli->query('UNLOCK TABLES') === FALSE) fail('Could not unlock role table');
+	lock('RummyRole', 'WRITE');
+	$winner = single('PlayerID', 'RummyRole', 'Role="WINNER"');
+	if($winner === NULL) update('RummyRole', 'PlayerID="'.$player.'"', 'Role="WINNER"');
+	else addResponse($winner . ' has already won');
+	unlock();
 	//this game is no longer in progress, so people can request to join the room
-	if($mysqli->query('UPDATE RummyGame SET InProgress=FALSE WHERE ID='.$gameID) === FALSE) fail('Could not set game back to not started');
+	update('RummyGame', 'InProgress=FALSE', 'ID='.$gameID);
 }
 
 succeed(array('win' => $win));

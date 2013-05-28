@@ -9,6 +9,16 @@ body {
 	background-color: green;
 	position: absolute;
 }
+#game_info {
+	width: 100%;
+	height: 50px;
+	font-size: 20px;
+	color: black;
+}
+.game_field {
+	width: 30%;
+	display: inline-block;
+}
 #card_panel {
 	width: 100%;
 	height: 420px;
@@ -135,27 +145,52 @@ body {
 
 #controls {
 	width: 100%;
+	text-align: justify;
 }
+#controls:after {
+	content:'';
+	display: inline-block;
+	width: 100%;
+	height: 0;
+	font-size: 0;
+	line-height: 0;
+	margin: 0;
+	padding: 0;
+}
+#controls > .buttons {
+	display: inline-block;
+}
+#game_msg {
+	display: inline-block;
+}
+
 #server_msg {
 	float: left;
 	margin: 6px 0 0 0;
 	padding: 5px;
 	border: 1px solid #ccc;
-	width: 50%;
+	width: 30%;
 	height: 200px;
 	overflow: auto;
 }
-#game_info {
+#room_info {
 	border: 2px dashed blue;
 	margin: 6px 0 0 0;
 	padding: 5px;
 	height: 200px;
 	overflow: hidden;
 }
+#players {
+	float: left;
+	width: 30%;
+	height: 100%;
+	overflow: auto;
+}
 #games {
 	float: left;
-	width: 50%;
+	width: 30%;
 	height: 100%;
+	overflow: auto;
 }
 #requests {
 	overflow: hidden;

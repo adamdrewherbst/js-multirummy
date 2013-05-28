@@ -2,6 +2,7 @@
 var suits = ['Clubs', 'Spades', 'Diamonds', 'Hearts']
 var numbers = ['Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Jack', 'Queen', 'King', 'Ace'];
 var numCards = suits.length * numbers.length, handSize = 7, dealt = false;
+
 //what I think is the current game state, so the server can tell me when it changes
 var state = {
 	nickname:'', //my state.nickname in the game room
@@ -10,18 +11,14 @@ var state = {
 	owner:'', //owner of my game
 	turn:'', //player whose turn it is
 	winner:'', //player who has won my game
+	players:{}, //all players in the game room
 	games:{}, //all existing games - key = name of game, value = game attributes [eg. inProgress]
 	request:'', //game I am requesting to join
 	requests:{} //all requests to join my game, if I am the owner - key = name of requester, val = nothing yet
 };
 
-function resetGame() {
-	//set all buttons/messages back to initial state
-	$('#win_message').css({'visibility':'', 'font-size':''});
-	$('#rules_message').css({'visibility':'', 'pointer-events':''});
-	//$('#start_button')[0].textContent = 'Deal Cards';
+function initGame() {
 	//generate all 52 cards as a stack on the upper left
-	dealt = false;
 	$('div.pile > .inner').empty(); //the inner div of a pile holds its cards
 	$stack = $('#stack');
 	//make an array of the numbers 0-51
@@ -29,7 +26,7 @@ function resetGame() {
 	for(var i = 0; i < numCards; i++) cards.push(i);
 	//and randomly iterate over it to generate the .card divs in the deck, until it is empty - this way the deck is shuffled
 	for(var i = 0; i < numCards; i++) {
-		var c = Math.floor(Math.random() * cards.length);
+		var c = 0; //Math.floor(Math.random() * cards.length);
 		var s = Math.floor(cards[c] / numbers.length);
 		var n = cards[c] % numbers.length;
 		text = n < 9 ? ''+(n+2) : numbers[n].charAt(0);
@@ -99,10 +96,10 @@ function resetGame() {
 			$this.attr('mousePressed','false');
 			switch(getPile($this)) {
 				case 'stack':
-					if(!dealt) deal();
+					//if(!dealt) deal();
 					break;
 				case 'hand': //move a clicked card from the hand to the temporary zone for building runs/sets
-					if(event.which === 1 || event.button === 1) moveCard($this, 'set');
+					if(event.which === 1 || event.button === 1) moveCard($this, 'set', 0, undefined, {});
 					else {
 						$.ajax({
 							url:'discard.php',
@@ -111,10 +108,6 @@ function resetGame() {
 							success: function(data) {
 								console.log('ajax success');
 								serverLog(data.response);
-								if(data.hasOwnProperty('card')) {
-									moveCard($this, 'discard');
-									dealCard(data.card);
-								}
 							},
 							error: function(jqXHR, textStatus, errorThrown) {
 								console.log('ajax - ' + textStatus + ': ' + errorThrown);
@@ -124,7 +117,7 @@ function resetGame() {
 					}
 					break;
 				case 'set':
-					moveCard($this, 'hand');
+					moveCard($this, 'hand', 0, undefined, {});
 					break;
 				default:
 					break;
@@ -176,13 +169,31 @@ function resetGame() {
 //*/
 }
 
+function resetGame() {
+	//set all buttons/messages back to initial state
+	$('#win_message').css({'visibility':'', 'font-size':''});
+	$('#rules_message').css({'visibility':'', 'pointer-events':''});
+	dealt = false;
+	for(var i = 0; i < numCards; i++) {
+		getCard(i).detach().attr('dealt','false').appendTo($('#stack > .inner'));
+	}
+	state.hand = {};
+}
+function leaveGame() {
+	resetGame();
+	setState('owner', '');
+	setState('turn', '');
+	setState('winner', '');
+	setState('request', '');
+}
+
 function cardName($card) {
 	return $card.attr('number') + ' of ' + $card.attr('suit');
 }
 
 //given index from 0-51, get card div
 function getCard(index) {
-	return $('.card[index="' + index + '"]');
+	return $('.card[index="' + index + '"]').filter(function() { return typeof $(this).data('targetCard') !== 'undefined'; });
 }
 
 function sameCard($card1, $card2) {
@@ -202,19 +213,21 @@ function deal(hand) {
 	dealt = true;
 }
 //send the top card from the deck to the hand
-function dealCard(index, delay=0) {
-	state.hand[index] = [];
+function dealCard(index, delay) {
+	state.hand[index] = [1];
 	var $card = getCard(index);
 	console.log('dealing ' + index + '=' + cardName($card));
 	$card.detach().appendTo('#stack > .inner');
 	$card.attr('dealt','true');
-	moveCard($card, 'hand', delay);
+	moveCard($card, 'hand', delay, undefined, {});
 }
-function discardCard(index, delay=0) {
+function discardCard(index, delay) {
+	if(!state.hand.hasOwnProperty(index)) return;
 	delete state.hand[index];
 	var $card = getCard(index);
+	$card.attr('dealt','true'); //in case it wasn't yet
 	console.log('discarding ' + index + '=' + cardName($card));
-	moveCard($card, 'discard', delay);
+	moveCard($card, 'discard', delay, undefined, {});
 }
 function topCard() {
 	var $stack = $('#stack > .inner > .card[dealt="false"]');
@@ -229,7 +242,7 @@ function topCard() {
  *  $before: optionally, the card in the destination pile to insert this one in front of - by default, will be added to the end
  *  from: the position to begin animating from - if this card was dragged into place, use the position of its Draggable's helper
  */
-function moveCard($card, pile, delay=0, $before=undefined, from={}) {
+function moveCard($card, pile, delay, $before, from) {
 
 	/* here is the protocol: 
 	 *   1) identify all cards that will need to move
@@ -252,7 +265,8 @@ function moveCard($card, pile, delay=0, $before=undefined, from={}) {
 			//and the cards to my right in the destination pile will shift right by one slot
 			if($before !== undefined && $newPile.css('position') !== 'absolute')
 				$movingCards = $movingCards.add($before.add($before.nextAll('.card[moving="false"]').filter(function() {
-					return typeof $(this).data('targetCard') != 'undefined'; })));
+					return typeof $(this).data('targetCard') !== 'undefined'; })));
+			$movingCards.each(function(i) { if(typeof $(this).data('targetCard') === 'undefined') console.log("1 can't move: " + cardName($(this))); });
 		}else { //if moving within a pile, the cards between my current and destination slots will shift
 			var start, end; //first identify those slots
 			if($before !== undefined) {
@@ -292,6 +306,7 @@ function moveCard($card, pile, delay=0, $before=undefined, from={}) {
 	//get all the target cards in place so we know their positions
 	$movingCards.each(function(i) {
 		var $this = $(this);
+		if(typeof $this.data('targetCard') === 'undefined') console.log("2 can't move: " + cardName($this));
 		var $target = $this.data('targetCard').detach().css({'position':'','top':'0','left':'0'});
 		if(!sameCard($this, $card)) $target.insertAfter($this);
 		else {
@@ -315,10 +330,8 @@ function moveCard($card, pile, delay=0, $before=undefined, from={}) {
 			{
 				duration: sameCard($this, $card) && !from.hasOwnProperty('top') ? 1000 : 500,
 				complete: function() {
-					$this.attr('moving','false');
 					$this.css({'position':'', 'z-index':'', 'top':'0', 'left':'0'});
-					if(sameCard($this, $card) && $newPile[0] !== $curPile[0]) $target.replaceWith($this);
-					else $target.replaceWith($this);
+					$target.replaceWith($this);
 					if(getPile($this) === 'hand') {
 						$this.draggable('option','disabled',false);
 						$this.draggable('option','scope','hand');
@@ -326,6 +339,7 @@ function moveCard($card, pile, delay=0, $before=undefined, from={}) {
 					}else if(getPile($this) === 'discard') {
 						$this.draggable('option','disabled',true);
 					}
+					$this.attr('moving','false');
 					if($('.card[moving="true"]').length === 0) checkWin();
 				}
 			}
@@ -379,55 +393,11 @@ function checkWin() {
 		}
 	});
 
-/*	var win = true; //innocent until proven guilty
-	$('#hand>.inner, #set>.inner').each(function(i) {
-		var $card = $(this).children(':first');
-		if($card.length < 1) return;
-		var $next, setType = '', setSize = 1, curMatch;
-		while(($next = nextCard($card)) !== undefined) {
-			console.log('checking ' + cardName($next));
-			//determine how this card relates to the previous one
-			if((numbers.indexOf($next.attr('number')) === numbers.indexOf($card.attr('number'))+1
-				|| ($card.attr('number') === 'Ace' && $next.attr('number') === 'Two'))
-				&& $next.attr('suit') === $card.attr('suit'))
-				curMatch = 'run';
-			else if($next.attr('number') === $card.attr('number'))
-				curMatch = 'group';
-			else curMatch = '';
-			console.log('curMatch: ' + curMatch + ', setType: ' + setType + ', setSize: ' + setSize);
-			//determine what that means in the scheme of things
-			if(setType === '') { //no current running set
-				if(curMatch === '') return win=false;
-				else {
-					setType = curMatch;
-					setSize = 2;
-				}
-			}
-			else if(curMatch === setType) setSize++; //extending the current set
-			else if(setSize < 3) return win=false; //last set was < 3 cards and we didn't extend it
-			else if(curMatch.length > 0 && setSize > 3) { //last set was > 3 cards, so we can spare the last card from it to start a new set
-				setType = curMatch;
-				setSize = 2;
-			}else { //last set was 3 cards, so we have to start a new one
-				setType = '';
-				setSize = 1;
-			}
-			$card = $next;
-		}
-		if(setSize < 3) return win=false; //make sure we ended with a valid set
-	});
-//*/
 	console.log('result: ' + win);
 	if(win) {
 		console.log('YOU WIN');
 		victoryAnimation();
 	}
-//should we try to determine when the user has definitively lost? probably not.
-/*	else if($('#stack > .inner').children().length === 0) {
-		console.log('YOU LOSE');
-		failureAnimation();
-	}
-//*/
 	return win;
 }
 
@@ -441,6 +411,16 @@ function failureAnimation() {
 	var $winMessage = $('#win_message');
 	$winMessage.html('SORRY, YOU LOSE.');
 	$winMessage.css({'visibility':'visible', 'font-size':'100px'});
+}
+
+function addPlayer(name) {
+	state.players[name] = [1];
+	var $player = $('<li class="player" name="' + name + '">' + name + '</li>');
+	$('#player_list').append($player);
+}
+function removePlayer(name) {
+	delete state.players[name];
+	$('li [.player][name="'+name+'"]').remove();
 }
 
 //add a game to the list - if not yet in progress, I can request to join it
@@ -477,12 +457,20 @@ function join_request() {
 function removeGame(name) {
 	serverLog('game ' + name + ' is over');
 	delete state.games[name];
-	$('li[.game name="' + name + '"]').remove();
+	$('li[.game][name="' + name + '"]').remove();
 }
 function setInProgress(name, inProgress) {
+	console.log('setting game ' + name + ' inprogress to ' + inProgress);
+	console.log('my game is ' + state.game + ', owner ' + state.owner);
 	state.games[name] = inProgress;
-	if(!inProgress || inProgress === '0') $('button[.join_game][name="' + name + '"]').css('visibility', 'hidden');
-	else $('button[.join_game][name="' + name + '"]').css('visibility', 'visible');
+	if(name === state.game && state.nickname === state.owner) {
+		if(!inProgress || inProgress === '0') $('#begin_game').show();
+		else $('#begin_game').hide();
+	}
+	else {
+		if(!inProgress || inProgress === '0') $('button[.join_game][name="' + name + '"]').show();
+		else $('button[.join_game][name="' + name + '"]').hide();
+	}
 }
 
 //add a request by player <name> to join this game
@@ -536,34 +524,35 @@ function poll() {
 		success: function(data) {
 			serverLog(data.response);
 			if(data.hasOwnProperty('game')) {
-				setState('game', data);
+				setState('game', data.game);
 				if(!isNull(state.game)) {
 					serverLog('You are now part of game ' + state.game);
-					$('#create_game').css('visibility', 'hidden');
-					$('.join_game').css('visibility', 'hidden'); //disable all Join buttons while in a game
-					$('#leave_game').css('visibility', 'visible');
+					$('#create_game').hide();
+					$('.join_game').hide(); //disable all Join buttons while in a game
+					$('#leave_game').show();
 				}else {
 					serverLog('You have left the game');
-					$('.join_game').css('visibility', 'visible');
+					$('#create_game').show();
+					$('.join_game').show();
 				}
 			}
 			if(data.hasOwnProperty('request')) {
 				if(isNull(data.request) && state.game == '') {
 					serverLog('Request to join ' + state.request + ' was denied');
-					$('.join_game').css('visibility', 'visible');
+					$('.join_game').show();
 				}
-				setState('request', data);
+				setState('request', data.request);
 			}
 			if(data.hasOwnProperty('owner')) {
-				setState('owner', data);
+				setState('owner', data.owner);
 				serverLog('Game owner has been changed to ' + data.owner);
 			}
 			if(data.hasOwnProperty('turn')) {
-				setState('turn', data);
+				setState('turn', data.turn);
 				serverLog('It is now ' + (data.turn === state.nickname ? 'YOUR' : data.turn + "'s") + ' turn');
 			}
 			if(data.hasOwnProperty('winner')) {
-				setState('winner', data);
+				setState('winner', data.winner);
 				serverLog(data.winner + ' wins!');
 			}
 			//fields with multiple values are returned from the server in the form:
@@ -571,12 +560,17 @@ function poll() {
 			if(data.hasOwnProperty('hand')) {
 				var i;
 				for(i = 1; i < 1+data.hand[0]; i++) discardCard(data.hand[i][0]);
-				for(; i < data.hand.length; i++) dealCard(data.hand[i][0]);
+				for(; i < data.hand.length; i++) dealCard(data.hand[i][0], (i-(1+data.hand[0]))*150);
 			}
 			if(data.hasOwnProperty('requests')) {
 				var i;
 				for(i = 1; i < 1+data.requests[0]; i++) removeRequest(data.requests[i][0]);
 				for(; i < data.requests.length; i++) addRequest(data.requests[i][0]);
+			}
+			if(data.hasOwnProperty('players')) {
+				var i;
+				for(i = 1; i < 1+data.players[0]; i++) removePlayer(data.players[i][0]);
+				for(; i < data.players.length; i++) addPlayer(data.players[i][0]);
 			}
 			if(data.hasOwnProperty('games')) {
 				var i;
@@ -606,8 +600,10 @@ function isNull(val) {
 }
 function setState(key, data) {
 	console.log('setting ' + key);
-	if(isNull(data[key])) state[key] = '';
-	else state[key] = data[key];
+	if(isNull(data)) state[key] = '';
+	else state[key] = data;
+	if(key === 'owner' || key === 'turn' || key === 'winner') $('#game_' + key).html(key.charAt(0).toUpperCase()
+		+ key.substr(1) + ': ' + state[key]);
 }
 
 //all the setup is done from here
@@ -617,7 +613,7 @@ $(document).ready(function() {
 		exit(0); //see exit routine at bottom - from http://stackoverflow.com/questions/550574/how-to-terminate-the-script-in-javascript
 	});
 
-	resetGame();
+	initGame();
 	var promptStr = 'Enter your nickname.';
 	while(state.nickname == '') {
 		state.nickname = prompt(promptStr);
@@ -641,6 +637,7 @@ $(document).ready(function() {
 		promptStr = 'Name is already taken. Enter your nickname.';
 	}
 	console.log('joining as ' + state.nickname);
+	$('#nickname').html(state.nickname);
 	poll(); //start polling the server for updates, eg. to the list of games we can join
 	
 /*	$.ajax({
@@ -703,7 +700,7 @@ $(document).ready(function() {
 	$('#rules_button').click(toggle_rules);
 	$('#rules_message').click(toggle_rules);
 	
-	$('#create_game').css('visibility', 'visible');
+	$('#create_game').show();
 	$('#create_game').click(function() {
 		var $this = $(this);
 		$.ajax({
@@ -713,9 +710,9 @@ $(document).ready(function() {
 			success: function(data) {
 				serverLog(data.response);
 				if(data.success) {
-					$this.css('visibility', 'hidden');
-					$('#begin_game').css('visibility', 'visible');
-					$('#leave_game').css('visibility', 'visible');
+					$this.hide();
+					$('#begin_game').show();
+					$('#leave_game').show();
 				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
@@ -724,9 +721,10 @@ $(document).ready(function() {
 		});
 	});
 	
-	$('#begin_game').css('visibility', 'hidden');
+	$('#begin_game').hide();
 	$('#begin_game').click(function() {
 		var $this = $(this);
+		resetGame();
 		$.ajax({
 			url:'begin_game.php',
 			data:{'nickname':state.nickname},
@@ -734,7 +732,7 @@ $(document).ready(function() {
 			success: function(data) {
 				serverLog(data.response);
 				if(data.success) {
-					$this.css('visibility', 'hidden');
+					$this.hide();
 				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
@@ -743,16 +741,20 @@ $(document).ready(function() {
 		});
 	});
 	
-	$('#leave_game').css('visibility', 'hidden');
+	$('#leave_game').hide();
 	$('#leave_game').click(function() {
+		var $this = $(this);
+		leaveGame();
 		$.ajax({
 			url:'leave_game.php',
 			data:{'nickname':state.nickname},
 			dataType:'json',
 			success: function(data) {
-				serverLog(data.response);
+				serverLog('leave_game: ' + data.response);
 				if(data.success) {
-					$this.css('visibility', 'hidden');
+					$this.hide();
+					$('#begin_game').hide();
+					$('#create_game').show();
 				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {

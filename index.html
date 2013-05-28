@@ -12,6 +12,11 @@
 	</head>
 	<body>
 		<div id="game_panel">
+			<div id="game_info">
+				<div id="game_owner" class="game_field">Owner:</div>
+				<div id="game_turn" class="game_field">Turn:</div>
+				<div id="game_winner" class="game_field">Winner:</div>
+			</div>
 			<div id="card_panel"> <!--boundary of where the cards can move-->
 				<!--centered divs are for showing messages/boxes on top of everything else-->
 				<div class="centered_outer">
@@ -38,15 +43,21 @@
 				<div id="controls">
 					<!--<input type="text" id="nickname" size="20" placeholder="Enter nickname"></input>
 					<button id="start_button" type="button"></button>-->
-					<button id="create_game" type="button">Create New Game</button>
-					<button id="begin_game" type="button">Begin Game</button>
-					<button id="leave_game" type="button">Leave Game</button>
-					<button id="rules_button" type="button">Rules</button>
-					<button id="stop_script" type="button">Stop Script</button>
-					<div id="game_msg"></div>
+					<div class="buttons">
+						<button id="create_game" type="button">Create New Game</button>
+						<button id="begin_game" type="button">Begin Game</button>
+						<button id="leave_game" type="button">Leave Game</button>
+						<button id="rules_button" type="button">Rules</button>
+						<button id="stop_script" type="button">Stop Script</button>
+					</div>
+					<div id="game_msg">You are logged in as <span id="nickname"></span></div>
 				</div>
 				<div id="server_msg"></div>
-				<div id="game_info">
+				<div id="room_info">
+					<div id="players">
+						<h3>Other Players</h3>
+						<ul id="player_list"></ul>
+					</div>
 					<div id="games">
 						<h3>Existing Games</h3>
 						<ul id="game_list"></ul>
