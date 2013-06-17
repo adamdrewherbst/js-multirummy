@@ -8,24 +8,32 @@ $numbers = array('Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'
 
 //to be used by clients who hit an error - set unlock if there are still locked tables we should try to unlock
 function fail($msg, $unlock = false) {
-	global $mysqli, $response, $result;
+	global $mysqli, $response, $result, $db_indirect;
 	$response .= $msg . PHP_EOL;
 	//if($mysqli->errno != 0)
 		addResponse('  Error: ' . $mysqli->errno . ' - ' . $mysqli->error);
-	echo json_encode(array('failure' => true, 'response' => $response));
 	if($result !== null and get_class($result) === 'mysqli_result') $result->free();
 	if($unlock) $mysqli->query('UNLOCK TABLES');
-	$mysqli->close();
-	exit();
+	if(!$db_indirect) {
+		echo json_encode(array('failure' => true, 'response' => $response));
+		$mysqli->close();
+		exit();
+	}else { //since indirect is set, we assume there is a calling script ready to catch our exception
+		throw new Exception($msg);
+	}
 }
 //to be used by clients to exit with data
 function succeed($data, $unlock = false) {
-	global $mysqli, $response, $result;
-	echo json_encode(array_merge(array('response' => $response), $data));
+	global $mysqli, $response, $result, $db_indirect;
 	if($result !== null and get_class($result) === 'mysqli_result') $result->free();
 	if($unlock) $mysqli->query('UNLOCK TABLES');
-	$mysqli->close();
-	exit();
+	if(!$db_indirect) {
+		echo json_encode(array_merge(array('response' => $response), $data));
+		$mysqli->close();
+		exit();
+	}else {
+		throw new Exception();
+	}
 }
 //to be used by clients to add to the response
 function addResponse($line) {

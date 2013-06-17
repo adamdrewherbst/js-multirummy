@@ -1,7 +1,8 @@
 <?php
 
 include 'dbconnect.php';
-include 'validate_client.php';
+//if the client claims to be a player, check their claim
+if($_POST['nickname'] != NULL) include 'validate_client.php';
 global $mysqli, $response, $player, $playerID, $gameID, $isOwner;
 
 $start_time = microtime(true);
@@ -15,7 +16,7 @@ $state = $_POST;
 $queries = array(
 	'game' => array('GameID', 'RummyPlayer', 'ID='.$playerID, false),
 	'request' => array('GameRequest', 'RummyPlayer', 'ID='.$playerID, false),
-	'players' => array('NickName', 'RummyPlayer', 'ID <> '.$playerID, true),
+	'players' => array('NickName', 'RummyPlayer', 'ID <> '.($playerID === NULL ? 0 : $playerID), true),
 	'games' => array('Name,InProgress', 'RummyGame', 'NOT ISNULL(Name)', true),
 	'requests' => array('NickName', 'RummyPlayer', 'GameRequest='.$gameID, true),
 	//these are only checked if we are actually in a game
@@ -29,7 +30,9 @@ $data = array(); //will store all the changes in the game state
 do{
 	foreach($queries as $attr => $fields) {
 
-		if(($gameID == NULL or $gameID === '0') and
+		//only check the state fields that matter based on whether the user is logged in/part of a game
+		if($playerID == NULL and ($attr === 'game' or $attr === 'request')) continue;
+		if(($playerID == NULL or $gameID == NULL or $gameID === '0') and
 			($attr === 'hand' or $attr === 'owner' or $attr === 'turn' or $attr === 'winner')) continue;
 		if(!$isOwner and $attr === 'requests') continue;
 	
@@ -75,8 +78,8 @@ do{
 			if(count($oldVals) + count($newVals) > 0) {
 				$data[$attr] = array_merge(array(count($oldVals)), $oldVals, $newVals);
 				$curStr = ''; $newStr = '';
-				foreach($state[$attr] as $k=>$v) $curStr .= $k . ',';
-				foreach($data[$attr] as $arr) $newStr .= $arr[0]. ',';
+				foreach($state[$attr] as $k=>$v) $curStr .= strval($k) . ',';
+				foreach($data[$attr] as $arr) $newStr .= ''.strval($arr[0]). ',';
 				addResponse($attr . ': ' . $curStr . ' => ' . $newStr);
 			}
 		}

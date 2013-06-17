@@ -26,7 +26,7 @@ function initGame() {
 	for(var i = 0; i < numCards; i++) cards.push(i);
 	//and randomly iterate over it to generate the .card divs in the deck, until it is empty - this way the deck is shuffled
 	for(var i = 0; i < numCards; i++) {
-		var c = 0; //Math.floor(Math.random() * cards.length);
+		var c = 0; //Math.floor(Math.random() * cards.length); //we don't need to shuffle, as that is now handled by MySQL
 		var s = Math.floor(cards[c] / numbers.length);
 		var n = cards[c] % numbers.length;
 		text = n < 9 ? ''+(n+2) : numbers[n].charAt(0);
@@ -46,7 +46,7 @@ function initGame() {
 		$card.data('targetCard', $card.clone().css('visibility','hidden'));
 
 		//cards can be dragged and dropped between the hand and set piles
-		$card.draggable({
+/*		$card.draggable({
 			disabled: true,
 			cancel: '[moving="true"]',
 			distance: 15,
@@ -82,6 +82,7 @@ function initGame() {
 				moveCard($other, getPile($this), 0, $before, ui.helper.position());
 			},
 		});
+//*/
 		
 		//clicking a hand/set card also toggles which pile it is in
 		//and right-clicking a hand card discards it - we need .mousedown/.mouseup because .click doesn't handle right-clicks
@@ -128,7 +129,7 @@ function initGame() {
 	}
 
 //TRIED USING SORTABLE - COULDN'T GET IT TO LOOK SMOOTH	
-/*	$('#hand > .inner').sortable({
+	$('#hand > .inner').sortable({
 		revert: true,
 		cancel: '[moving="true"]',
 		connectWith: '#set',
@@ -136,26 +137,38 @@ function initGame() {
 		cursor: 'move',
 		helper: 'clone',
 		distance: 15,
-		tolerance: 'intersect',
+		tolerance: 'pointer',
 		zIndex: 5,
 		start: function(e, ui) {
 			var $ph = $(ui.placeholder);
-			$ph.data('lastPos',$(this).index());
+			$ph.data('lastPos',$(ui.item).index()); //mark where the card is when we start dragging it
+			console.log('sort starting at ' + $(ui.item).index());
 		},
 		change: function(e, ui) {
 			var $ph = $(ui.placeholder);
-			if($ph.data('lastPos') < $ph.index()) {
+			console.log('sorted from ' + $ph.data('lastPos') + ' to ' + $ph.index());
+			if($ph.data('lastPos') > $ph.index()) { //shifted left
 				var $next = $ph.next();
-				if($next.length > 0) $next.css('margin-right','125px').animate({'margin-right':'0px'},500);
-			}else {
+				if($next.length > 0) {
+					$next.css({'margin-left':'0px','margin-right':'125px'}).animate(
+						{'margin-left':'25px','margin-right':'0px'},
+						{duration:500, complete: function() {checkWin();} });
+					$ph.css('width','0px').animate({'width':'100px'},500);
+				}else checkWin();
+			}else { //shifted right
 				var $prev = $ph.prev();
-				if($prev.length > 0) $prev.css('margin-left','125px').animate({'margin-left':'25px'},500);
+				if($prev.length > 0) {
+					$prev.css('margin-left','150px').animate(
+						{'margin-left':'25px'},
+						{duration:500, complete: function() {checkWin();} });
+					$ph.css({'margin-left':'0px','width':'0px'}).animate({'margin-left':'25px','width':'100px'},500);
+				}else checkWin();
 			}
-			$(ui.placeholder).css('width','0px').animate({'width':'100px'},500);
 			$ph.data('lastPos', $ph.index());
 		},
+//*/
 	});
-	$('#set > .inner').sortable({
+/*	$('#set > .inner').sortable({
 		revert: 500,
 		cancel: '[moving="true"]',
 		connectWith: '#set',
@@ -332,13 +345,14 @@ function moveCard($card, pile, delay, $before, from) {
 				complete: function() {
 					$this.css({'position':'', 'z-index':'', 'top':'0', 'left':'0'});
 					$target.replaceWith($this);
-					if(getPile($this) === 'hand') {
+/*					if(getPile($this) === 'hand') {
 						$this.draggable('option','disabled',false);
 						$this.draggable('option','scope','hand');
 						$this.setDroppableScope('hand');
 					}else if(getPile($this) === 'discard') {
 						$this.draggable('option','disabled',true);
 					}
+//*/
 					$this.attr('moving','false');
 					if($('.card[moving="true"]').length === 0) checkWin();
 				}
@@ -414,13 +428,14 @@ function failureAnimation() {
 }
 
 function addPlayer(name) {
+	if(name === state.nickname) return; //long_poll saw our new nickname in the DB and thought it was another player
 	state.players[name] = [1];
 	var $player = $('<li class="player" name="' + name + '">' + name + '</li>');
 	$('#player_list').append($player);
 }
 function removePlayer(name) {
 	delete state.players[name];
-	$('li [.player][name="'+name+'"]').remove();
+	$('li[.player][name="'+name+'"]').remove();
 }
 
 //add a game to the list - if not yet in progress, I can request to join it
@@ -606,18 +621,11 @@ function setState(key, data) {
 		+ key.substr(1) + ': ' + state[key]);
 }
 
-//all the setup is done from here
-$(document).ready(function() {
-
-	$('#stop_script').click(function() {
-		exit(0); //see exit routine at bottom - from http://stackoverflow.com/questions/550574/how-to-terminate-the-script-in-javascript
-	});
-
-	initGame();
+function login() {
 	var promptStr = 'Enter your nickname.';
 	while(state.nickname == '') {
 		state.nickname = prompt(promptStr);
-		if(state.nickname == '') return;
+		if(state.nickname == '') return false;
 		$.ajax({
 			url:'register.php',
 			async:false,
@@ -625,9 +633,10 @@ $(document).ready(function() {
 			dataType:'json',
 			success: function(data) {
 				serverLog(data.response);
-				if(!data.success) {
-					state.nickname = '';
-					return;
+				if(!data.success) state.nickname = '';
+				else {
+					$('#logout_msg').hide();
+					$('#login_msg').show();
 				}
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
@@ -638,6 +647,18 @@ $(document).ready(function() {
 	}
 	console.log('joining as ' + state.nickname);
 	$('#nickname').html(state.nickname);
+	return true;
+}
+
+//all the setup is done from here
+$(document).ready(function() {
+
+	$('#stop_script').click(function() {
+		exit(0); //see exit routine at bottom - from http://stackoverflow.com/questions/550574/how-to-terminate-the-script-in-javascript
+	});
+
+	initGame();
+	if(!login()) return; //unsuccessful login
 	poll(); //start polling the server for updates, eg. to the list of games we can join
 	
 /*	$.ajax({
@@ -756,6 +777,30 @@ $(document).ready(function() {
 					$('#begin_game').hide();
 					$('#create_game').show();
 				}
+			},
+			error: function(jqXHR, textStatus, errorThrown) {
+				console.log('ajax - ' + textStatus + ': ' + errorThrown);
+			}
+		});
+	});
+	
+	$('#login_msg').show();
+	$('#login').click(function() {
+		login();
+	});
+	
+	$('#logout_msg').hide();
+	$('#logout').click(function() {
+		$.ajax({
+			url: 'logout.php',
+			data:{'nickname':state.nickname},
+			dataType:'json',
+			success: function(data) {
+				serverLog(data.response);
+				leaveGame();
+				setState('nickname', '');
+				$('#login_msg').hide();
+				$('#logout_msg').show();
 			},
 			error: function(jqXHR, textStatus, errorThrown) {
 				console.log('ajax - ' + textStatus + ': ' + errorThrown);
