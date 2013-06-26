@@ -115,16 +115,10 @@ function unlock($fail = true) {
 }
 
 //now connect to the MySQL 'games' database
-$user = '1380903_games';
-$pass = 'playtime';
-$db = '1380903_games';
-$server = 'pdb7.biz.nf';
-//*/
-/*$user = 'root';
-$pass = 'tsup**dl3';
-$db = 'games';
-$server = 'localhost';
-//*/
+$user = '';
+$pass = '';
+$db = '';
+$server = '';
 
 $mysqli = new mysqli($server, $user, $pass, $db);
 if($mysqli->connect_errno) {
